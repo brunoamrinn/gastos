@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Controle de Gastos e Entradas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #121212;
+      --text-color: #fff;
+      --primary-color: #2196f3;
+      --secondary-bg: #1e1e1e;
+      --border-color: #333;
+    }
+    body.light {
+      --bg-color: #fff;
+      --text-color: #000;
+      --primary-color: #1976d2;
+      --secondary-bg: #f2f2f2;
+      --border-color: #ccc;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    h1, h2 {
+      color: var(--primary-color);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .controls, table, canvas {
+      max-width: 900px;
+      margin: 0 auto 30px;
+      width: 100%;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--secondary-bg);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border-color);
+      text-align: left;
+    }
+    th {
+      background: var(--primary-color);
+      color: white;
+      user-select: none;
+    }
+    tfoot td {
+      font-weight: bold;
+      background: var(--border-color);
+    }
+    input, button, select {
+      padding: 10px;
+      margin: 6px 4px;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    input, select {
+      width: calc(25% - 10px);
+      min-width: 120px;
+    }
+    button {
+      background: var(--primary-color);
+      color: white;
+      cursor: pointer;
+      transition: opacity 0.3s ease;
+    }
+    button:hover {
+      opacity: 0.85;
+    }
+    /* Gráficos menores e estilizados */
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 300px;
+      margin: 20px auto 40px;
+      border-radius: 8px;
+      background: var(--secondary-bg);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      padding: 10px;
+    }
+    .alerta {
+      color: #ff5555;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 700px) {
+      input, select {
+        width: 100%;
+        margin: 8px 0;
+      }
+      .controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      button {
+        width: 100%;
+        margin: 8px 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Controle de Gastos e Entradas</h1>
+
+  <div class="controls">
+    <button onclick="alternarTema()">Alternar Tema</button>
+  </div>
+
+  <table id="gastosTable" aria-label="Tabela de gastos e entradas">
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th>Categoria</th>
+        <th>Descrição</th>
+        <th>Valor (R$)</th>
+        <th>Ação</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">Total Entradas</td>
+        <td id="totalEntradas">R$ 0,00</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td colspan="3">Total Gastos</td>
+        <td id="totalGastos">R$ 0,00</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td colspan="3">Saldo</td>
+        <td id="saldo">R$ 0,00</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="controls" aria-label="Formulário de inserção de gasto ou entrada">
+    <select id="tipo" aria-label="Tipo de lançamento">
+      <option value="entrada">Entrada</option>
+      <option value="gasto">Gasto</option>
+    </select>
+    <input type="text" id="categoria" placeholder="Categoria" aria-label="Categoria" />
+    <input type="text" id="descricao" placeholder="Descrição" aria-label="Descrição" />
+    <input type="number" id="valor" placeholder="Valor (R$)" aria-label="Valor" min="0" step="0.01" />
+    <button onclick="adicionarLinha()">Adicionar</button>
+    <button onclick="exportarCSV()">Exportar CSV</button>
+    <button onclick="exportarPDF()">Exportar PDF</button>
+    <button onclick="limparTabela()" title="Limpar todos os dados">Limpar Tudo</button>
+  </div>
+
+  <div class="alerta" id="alerta"></div>
+
+  <h2>Gráficos</h2>
+  <canvas id="graficoPizza" aria-label="Gráfico de pizza"></canvas>
+  <canvas id="graficoBarra" aria-label="Gráfico de barras"></canvas>
+  <canvas id="graficoLinha" aria-label="Gráfico de linha"></canvas>
+
+<script>
+  let graficoPizza, graficoBarra, graficoLinha;
+
+  function alternarTema() {
+    document.body.classList.toggle('light');
+    salvarTema();
+  }
+
+  function salvarTema() {
+    localStorage.setItem('tema', document.body.classList.contains('light') ? 'light' : 'dark');
+  }
+
+  function carregarTema() {
+    const tema = localStorage.getItem('tema');
+    if (tema === 'light') document.body.classList.add('light');
+  }
+
+  function adicionarLinha() {
+    const tipo = document.getElementById('tipo').value;
+    const categoria = document.getElementById('categoria').value.trim();
+    const descricao = document.getElementById('descricao').value.trim();
+    const valorInput = document.getElementById('valor');
+    const valor = parseFloat(valorInput.value);
+
+    if (!categoria || !descricao || isNaN(valor) || valor <= 0) {
+      alert("Por favor, preencha todos os campos corretamente (valor positivo).");
+      return;
+    }
+
+    const table = document.querySelector('#gastosTable tbody');
+    const tr = document.createElement('tr');
+
+    tr.innerHTML = `
+      <td>${tipo}</td>
+      <td>${categoria}</td>
+      <td>${descricao}</td>
+      <td class="valor" data-tipo="${tipo}">${valor.toFixed(2)}</td>
+      <td><button onclick="removerLinha(this)" aria-label="Remover linha">Remover</button></td>
+    `;
+
+    table.appendChild(tr);
+
+    valorInput.value = '';
+    document.getElementById('categoria').value = '';
+    document.getElementById('descricao').value = '';
+    document.getElementById('categoria').focus();
+
+    salvarNoLocalStorage();
+    atualizarTotais();
+  }
+
+  function removerLinha(botao) {
+    botao.closest('tr').remove();
+    salvarNoLocalStorage();
+    atualizarTotais();
+  }
+
+  function limparTabela() {
+    if(confirm('Deseja realmente limpar todos os dados?')) {
+      document.querySelector('#gastosTable tbody').innerHTML = '';
+      salvarNoLocalStorage();
+      atualizarTotais();
+    }
+  }
+
+  function exportarCSV() {
+    let csv = 'Tipo,Categoria,Descrição,Valor\n';
+    document.querySelectorAll('#gastosTable tbody tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      csv += `${tds[0].innerText},${tds[1].innerText},${tds[2].innerText},${tds[3].innerText}\n`;
+    });
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'controle_gastos.csv';
+    a.click();
+  }
+
+  function exportarPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+    // Cores e fontes
+    const primaryColor = '#2196f3';
+    const textColor = document.body.classList.contains('light') ? '#000' : '#fff';
+    const secondaryBg = document.body.classList.contains('light') ? '#f2f2f2' : '#1e1e1e';
+
+    // Fundo do cabeçalho
+    doc.setFillColor(primaryColor);
+    doc.rect(0, 0, doc.internal.pageSize.width, 50, 'F');
+
+    // Texto cabeçalho
+    doc.setFontSize(20);
+    doc.setTextColor('#fff');
+    doc.text('Controle de Gastos e Entradas', 40, 35);
+
+    doc.setFontSize(12);
+    doc.setTextColor(textColor);
+    let y = 70;
+
+    // Cabeçalho tabela personalizada
+    doc.setFillColor(secondaryBg);
+    doc.rect(40, y - 15, doc.internal.pageSize.width - 80, 20, 'F');
+    doc.setTextColor(primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text('Tipo', 45, y);
+    doc.text('Categoria', 100, y);
+    doc.text('Descrição', 200, y);
+    doc.text('Valor (R$)', doc.internal.pageSize.width - 120, y, {align: 'right'});
+
+    doc.setFont(undefined, 'normal');
+    y += 10;
+
+    // Conteúdo da tabela
+    const linhaAlt = ['#ffffff', '#f8f8f8'];
+    let linhaCount = 0;
+
+    document.querySelectorAll('#gastosTable tbody tr').forEach(tr => {
+      if(y > 750) { doc.addPage(); y = 50; }
+      const tds = tr.querySelectorAll('td');
+      const bg = linhaAlt[linhaCount % 2];
+      doc.setFillColor(bg);
+      doc.rect(40, y - 10, doc.internal.pageSize.width - 80, 18, 'F');
+
+      doc.setTextColor(textColor);
+      doc.text(tds[0].innerText, 45, y);
+      doc.text(tds[1].innerText, 100, y);
+      doc.text(tds[2].innerText, 200, y);
+      doc.text('R$ ' + tds[3].innerText, doc.internal.pageSize.width - 120, y, {align: 'right'});
+
+      y += 20;
+      linhaCount++;
+    });
+
+    y += 30;
+    doc.setFontSize(14);
+    doc.setTextColor(primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Total Entradas:`, 40, y);
+    doc.text(document.getElementById('totalEntradas').innerText, doc.internal.pageSize.width - 120, y, {align: 'right'});
+
+    y += 20;
+    doc.text(`Total Gastos:`, 40, y);
+    doc.text(document.getElementById('totalGastos').innerText, doc.internal.pageSize.width - 120, y, {align: 'right'});
+
+    y += 20;
+    doc.text(`Saldo:`, 40, y);
+    doc.text(document.getElementById('saldo').innerText, doc.internal.pageSize.width - 120, y, {align: 'right'});
+
+    doc.save('controle_gastos.pdf');
+  }
+
+  function atualizarTotais() {
+    const valoresEntradas = [];
+    const valoresGastos = [];
+    document.querySelectorAll('.valor').forEach(td => {
+      const v = parseFloat(td.innerText);
+      if (td.dataset.tipo === 'entrada') valoresEntradas.push(v);
+      else valoresGastos.push(v);
+    });
+    const totalEntradas = valoresEntradas.reduce((a,b) => a + b, 0);
+    const totalGastos = valoresGastos.reduce((a,b) => a + b, 0);
+    const saldo = totalEntradas - totalGastos;
+
+    document.getElementById('totalEntradas').innerText = `R$ ${totalEntradas.toFixed(2)}`;
+    document.getElementById('totalGastos').innerText = `R$ ${totalGastos.toFixed(2)}`;
+    document.getElementById('saldo').innerText = `R$ ${saldo.toFixed(2)}`;
+
+    atualizarGraficos();
+  }
+
+  function atualizarGraficos() {
+    const tipos = [];
+    const categorias = [];
+    const valores = [];
+
+    document.querySelectorAll('#gastosTable tbody tr').forEach(tr => {
+      const tipo = tr.cells[0].innerText;
+      const categoria = tr.cells[1].innerText;
+      const valor = parseFloat(tr.cells[3].innerText);
+      tipos.push(tipo);
+      categorias.push(categoria);
+      valores.push(valor);
+    });
+
+    // Dados agregados por categoria (somando entradas e gastos)
+    const dadosCategoria = {};
+    categorias.forEach((cat, i) => {
+      if (!dadosCategoria[cat]) dadosCategoria[cat] = 0;
+      // Para o gráfico, entradas positivas e gastos negativos
+      dadosCategoria[cat] += (tipos[i] === 'entrada' ? 1 : -1) * valores[i];
+    });
+
+    const labels = Object.keys(dadosCategoria);
+    const dataValores = labels.map(l => Math.abs(dadosCategoria[l]));
+
+    // Se os gráficos existirem, destrua para evitar bugs
+    if (graficoPizza) graficoPizza.destroy();
+    if (graficoBarra) graficoBarra.destroy();
+    if (graficoLinha) graficoLinha.destroy();
+
+    graficoPizza = new Chart(document.getElementById('graficoPizza'), {
+      type: 'pie',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Valores por categoria',
+          data: dataValores,
+          backgroundColor: [
+            '#42a5f5', '#66bb6a', '#ef5350', '#ffa726', '#26a69a', '#ec407a', '#ab47bc'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+
+    graficoBarra = new Chart(document.getElementById('graficoBarra'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Valores (abs)',
+          data: dataValores,
+          backgroundColor: '#2196f3'
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    graficoLinha = new Chart(document.getElementById('graficoLinha'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Valores (abs)',
+          data: dataValores,
+          fill: false,
+          borderColor: '#66bb6a',
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function salvarNoLocalStorage() {
+    const linhas = [];
+    document.querySelectorAll('#gastosTable tbody tr').forEach(tr => {
+      linhas.push({
+        tipo: tr.cells[0].innerText,
+        categoria: tr.cells[1].innerText,
+        descricao: tr.cells[2].innerText,
+        valor: tr.cells[3].innerText
+      });
+    });
+    localStorage.setItem('controleGastos', JSON.stringify(linhas));
+  }
+
+  function carregarDoLocalStorage() {
+    const dados = JSON.parse(localStorage.getItem('controleGastos') || '[]');
+    const tbody = document.querySelector('#gastosTable tbody');
+    tbody.innerHTML = '';
+    dados.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${item.tipo}</td>
+        <td>${item.categoria}</td>
+        <td>${item.descricao}</td>
+        <td class="valor" data-tipo="${item.tipo}">${parseFloat(item.valor).toFixed(2)}</td>
+        <td><button onclick="removerLinha(this)" aria-label="Remover linha">Remover</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    atualizarTotais();
+  }
+
+  window.onload = () => {
+    carregarTema();
+    carregarDoLocalStorage();
+  }
+</script>
+
+</body>
+</html>
